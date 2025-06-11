@@ -2,6 +2,7 @@ use std::env;
 use std::fmt;
 use std::error::Error;
 use std::string::FromUtf8Error;
+use zmq;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -10,6 +11,7 @@ pub enum AppError {
     Io(std::io::Error),
     Json(serde_json::Error),
     Custom(String),
+    Zmq(zmq::Error),
 }
 
 impl fmt::Display for AppError {
@@ -20,6 +22,7 @@ impl fmt::Display for AppError {
             AppError::Io(err) => write!(f, "I/O error: {}", err),
             AppError::Json(err) => write!(f, "JSON parsing error: {}", err),
             AppError::Custom(msg) => write!(f, "Custom application error: {}", msg),
+            AppError::Zmq(err) => write!(f, "ZeroMQ error: {}", err),
         }
     }
 }
@@ -32,6 +35,7 @@ impl Error for AppError {
             AppError::Io(err) => Some(err),
             AppError::Json(err) => Some(err),
             AppError::Custom(_) => None,
+            AppError::Zmq(err) => Some(err),
         }
     }
 }
@@ -57,5 +61,11 @@ impl From<serde_json::Error> for AppError {
 impl From<FromUtf8Error> for AppError {
     fn from(err: FromUtf8Error) -> AppError {
         AppError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, err.to_string()))
+    }
+}
+
+impl From<zmq::Error> for AppError {
+    fn from(err: zmq::Error) -> AppError {
+        AppError::Zmq(err)
     }
 }

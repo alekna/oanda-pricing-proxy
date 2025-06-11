@@ -1,6 +1,7 @@
 use reqwest::Client;
 use futures_util::StreamExt;
 use std::env;
+use zmq;
 
 use crate::errors::AppError;
 use crate::models::StreamMessage;
@@ -54,6 +55,28 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
         Err(e) => return Err(AppError::EnvVar(instruments_var_name.to_string(), e)),
     };
 
+    let zmq_pub_address_var_name = "ZMQ_PUB_ADDRESS";
+    let zmq_pub_address = match env::var(zmq_pub_address_var_name) {
+        Ok(val) => {
+            if val.is_empty() {
+                eprintln!("Warning: Environment variable '{}' is empty. Using default: tcp://*:9500", zmq_pub_address_var_name);
+                "tcp://*:9500".to_string()
+            } else {
+                val
+            }
+        },
+        Err(env::VarError::NotPresent) => {
+            eprintln!("Warning: Environment variable '{}' not set. Using default: tcp://*:9500", zmq_pub_address_var_name);
+            "tcp://*:9500".to_string()
+        },
+        Err(e) => return Err(AppError::EnvVar(zmq_pub_address_var_name.to_string(), e)),
+    };
+
+    let context = zmq::Context::new();
+    let publisher = context.socket(zmq::PUB)?;
+    publisher.bind(&zmq_pub_address)?;
+    println!("ZeroMQ PUB socket bound to: {}", zmq_pub_address);
+
     let base_url_without_params = format!(
         "{}/v3/accounts/{}/pricing/stream",
         base_endpoint, account_id
@@ -103,6 +126,9 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
 
             match serde_json::from_str::<StreamMessage>(trimmed_line) {
                 Ok(message) => {
+                    let serialized_message = serde_json::to_string(&message)?;
+                    publisher.send(&serialized_message, 0)?;
+
                     match message {
                         StreamMessage::Pricing(pricing) => {
                             println!("Pricing Update: {:?}", pricing);
