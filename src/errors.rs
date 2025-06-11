@@ -69,3 +69,35 @@ impl From<zmq::Error> for AppError {
         AppError::Zmq(err)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::ErrorKind;
+    use std::env::VarError;
+
+    #[test]
+    fn test_app_error_display_env_var() {
+        let error = AppError::EnvVar("TEST_VAR".to_string(), VarError::NotPresent);
+        assert_eq!(format!("{}", error), "Environment variable 'TEST_VAR' error: environment variable not found");
+    }
+
+    #[test]
+    fn test_app_error_display_io() {
+        let error = AppError::Io(std::io::Error::new(ErrorKind::NotFound, "file not found"));
+        assert_eq!(format!("{}", error), "I/O error: file not found");
+    }
+
+    #[test]
+    fn test_app_error_display_custom() {
+        let error = AppError::Custom("something went wrong".to_string());
+        assert_eq!(format!("{}", error), "Custom application error: something went wrong");
+    }
+
+    #[test]
+    fn test_app_error_display_json() {
+        let json_err = serde_json::from_str::<serde_json::Value>("{invalid").unwrap_err();
+        let error = AppError::Json(json_err);
+        assert!(format!("{}", error).starts_with("JSON parsing error: "));
+    }
+}
