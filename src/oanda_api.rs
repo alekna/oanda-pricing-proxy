@@ -2,6 +2,7 @@ use reqwest::Client;
 use futures_util::StreamExt;
 use std::env;
 use zmq;
+use tracing::{info, warn, error};
 
 use crate::errors::AppError;
 use crate::models::StreamMessage;
@@ -16,14 +17,14 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
     let oanda_env_type_str = match env::var(oanda_env_type_var_name) {
         Ok(val) => {
             if val.is_empty() {
-                eprintln!("Warning: Environment variable '{}' is empty. Using default: fxpractice", oanda_env_type_var_name);
+                warn!("Environment variable '{}' is empty. Using default: fxpractice", oanda_env_type_var_name);
                 "fxpractice".to_string()
             } else {
                 val.to_lowercase()
             }
         },
         Err(env::VarError::NotPresent) => {
-            eprintln!("Warning: Environment variable '{}' not set. Using default: fxpractice", oanda_env_type_var_name);
+            warn!("Environment variable '{}' not set. Using default: fxpractice", oanda_env_type_var_name);
             "fxpractice".to_string()
         },
         Err(e) => return Err(AppError::EnvVar(oanda_env_type_var_name.to_string(), e)),
@@ -42,14 +43,14 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
     let instruments = match env::var(instruments_var_name) {
         Ok(val) => {
             if val.is_empty() {
-                eprintln!("Warning: Environment variable '{}' is empty. Using default: EUR_USD", instruments_var_name);
+                warn!("Environment variable '{}' is empty. Using default: EUR_USD", instruments_var_name);
                 "EUR_USD".to_string()
             } else {
                 val
             }
         },
         Err(env::VarError::NotPresent) => {
-            eprintln!("Warning: Environment variable '{}' not set. Using default: EUR_USD", instruments_var_name);
+            warn!("Environment variable '{}' not set. Using default: EUR_USD", instruments_var_name);
             "EUR_USD".to_string()
         },
         Err(e) => return Err(AppError::EnvVar(instruments_var_name.to_string(), e)),
@@ -59,14 +60,14 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
     let zmq_pub_address = match env::var(zmq_pub_address_var_name) {
         Ok(val) => {
             if val.is_empty() {
-                eprintln!("Warning: Environment variable '{}' is empty. Using default: tcp://*:9500", zmq_pub_address_var_name);
+                warn!("Environment variable '{}' is empty. Using default: tcp://*:9500", zmq_pub_address_var_name);
                 "tcp://*:9500".to_string()
             } else {
                 val
             }
         },
         Err(env::VarError::NotPresent) => {
-            eprintln!("Warning: Environment variable '{}' not set. Using default: tcp://*:9500", zmq_pub_address_var_name);
+            warn!("Environment variable '{}' not set. Using default: tcp://*:9500", zmq_pub_address_var_name);
             "tcp://*:9500".to_string()
         },
         Err(e) => return Err(AppError::EnvVar(zmq_pub_address_var_name.to_string(), e)),
@@ -75,7 +76,7 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
     let context = zmq::Context::new();
     let publisher = context.socket(zmq::PUB)?;
     publisher.bind(&zmq_pub_address)?;
-    println!("ZeroMQ PUB socket bound to: {}", zmq_pub_address);
+    info!("ZeroMQ PUB socket bound to: {}", zmq_pub_address);
 
     let base_url_without_params = format!(
         "{}/v3/accounts/{}/pricing/stream",
@@ -93,9 +94,8 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
     let status = response.status();
 
     if !status.is_success() {
-        eprintln!("Error: Received non-success status: {}", status);
         let body = response.text().await?;
-        eprintln!("Response body: {}", body);
+        error!("Received non-success status: {}. Response body: {}", status, body);
         return Err(AppError::Custom(format!(
             "Failed to connect to Oanda stream: HTTP status {}. Body: {}",
             status,
@@ -103,8 +103,8 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
         )));
     }
 
-    println!("Connected to Oanda pricing stream from: {}", base_url_without_params);
-    println!("Streaming instruments: {}", instruments);
+    info!("Connected to Oanda pricing stream from: {}", base_url_without_params);
+    info!("Streaming instruments: {}", instruments);
 
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
@@ -137,12 +137,12 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to parse JSON: {} for line: {}", e, trimmed_line);
+                    error!("Failed to parse JSON: {} for line: {}", e, trimmed_line);
                 }
             }
         }
     }
 
-    println!("Oanda pricing stream ended gracefully.");
+    info!("Oanda pricing stream ended gracefully.");
     Ok(())
 }
