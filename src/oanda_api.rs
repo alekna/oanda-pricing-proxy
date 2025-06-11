@@ -130,11 +130,9 @@ pub async fn connect_and_stream_pricing() -> Result<(), AppError> {
                     publisher.send(&serialized_message, 0)?;
 
                     match message {
-                        StreamMessage::Pricing(pricing) => {
-                            println!("Pricing Update: {:?}", pricing);
+                        StreamMessage::Pricing(_) => {
                         }
-                        StreamMessage::Heartbeat(heartbeat) => {
-                            println!("Heartbeat: {:?}", heartbeat);
+                        StreamMessage::Heartbeat(_) => {
                         }
                     }
                 }
